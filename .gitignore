@@ -1,0 +1,10 @@
+# Keys
+*.pem
+
+# Modules
+**/.terraform/*
+node_modules/
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
