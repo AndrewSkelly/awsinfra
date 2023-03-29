@@ -1,0 +1,70 @@
+- name: Configure Apache and MySQL on EC2 instance
+  hosts: your_ec2_instance
+  become: true
+  vars:
+    db_username: your_db_username
+    db_password: your_db_password
+  tasks:
+  - name: Export RDS endpoint
+    shell: "export RDS_ENDPOINT=${aws_db_instance.mysqldb.endpoint}"
+  - name: Install Apache
+    yum:
+      name: httpd
+      state: present
+  - name: Start and enable Apache service
+    systemd:
+      name: httpd
+      state: started
+      enabled: yes
+  - name: Enable Apache proxy modules
+    shell: "a2enmod proxy && a2enmod proxy_http"
+  - name: Create Apache config file
+    blockinfile:
+      path: /etc/httpd/conf.d/carapi.conf
+      block: |
+        <VirtualHost *:80>
+            ServerName {{ ansible_host }}
+            ProxyPreserveHost On
+            ProxyRequests Off
+            ProxyPass / http://localhost:3001/
+            ProxyPassReverse / http://localhost:3001/
+        </VirtualHost>
+  - name: Restart Apache service
+    systemd:
+      name: httpd
+      state: restarted
+  - name: Install MySQL
+    yum:
+      name: mysql
+      state: present
+  - name: Install Git
+    yum:
+      name: git
+      state: present
+  - name: Set permissions on /var/www
+    file:
+      path: /var/www
+      mode: '0777'
+      recurse: yes
+  - name: Create index.html file
+    copy:
+      dest: /var/www/html/index.html
+      content: "<html><body><h1>Hello, World! - Apache is up and running!</h1></body></html>"
+  - name: Create database and table
+    mysql_db:
+      name: cars_db
+      state: present
+      login_user: "{{ db_username }}"
+      login_password: "{{ db_password }}"
+  - name: Insert data into table
+    mysql_query:
+      db: cars_db
+      login_user: "{{ db_username }}"
+      login_password: "{{ db_password }}"
+      query: "INSERT INTO cars (brand, registration, points) VALUES ('Toyota', '08-MO-2444', 100), ('Ford', '09-D-21435', 80), ('Honda', '131-C-52450', 120);"
+  - name: Export instance public IP
+    shell: "echo 'export INSTANCE_PUBLIC_IP=${aws_db_instance.mysqldb.endpoint}' > env.sh"
+  - name: Clone carapi repo
+    git:
+      repo: https://github.com/AndrewSkelly/carapi
+      dest: /home/ec2-user/carapi
